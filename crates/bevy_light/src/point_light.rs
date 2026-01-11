@@ -71,6 +71,7 @@ pub struct PointLight {
 
     /// Whether this light casts shadows.
     pub shadows_enabled: bool,
+    pub is_player: bool,
 
     /// Whether soft shadows are enabled.
     ///
@@ -133,6 +134,7 @@ impl Default for PointLight {
             range: 20.0,
             radius: 0.0,
             shadows_enabled: false,
+            is_player: false,
             affects_lightmapped_mesh_diffuse: true,
             shadow_depth_bias: Self::DEFAULT_SHADOW_DEPTH_BIAS,
             shadow_normal_bias: Self::DEFAULT_SHADOW_NORMAL_BIAS,

@@ -75,6 +75,7 @@ pub struct ExtractedPointLight {
     pub radius: f32,
     pub transform: GlobalTransform,
     pub shadows_enabled: bool,
+    pub is_player: bool,
     pub shadow_depth_bias: f32,
     pub shadow_normal_bias: f32,
     pub shadow_map_near_z: f32,
@@ -116,6 +117,7 @@ bitflags::bitflags! {
         const SPOT_LIGHT_Y_NEGATIVE             = 1 << 1;
         const VOLUMETRIC                        = 1 << 2;
         const AFFECTS_LIGHTMAPPED_MESH_DIFFUSE  = 1 << 3;
+        const IS_PLAYER                         = 1 << 4;
         const NONE                              = 0;
         const UNINITIALIZED                     = 0xFFFF;
     }
@@ -411,6 +413,7 @@ pub fn extract_lights(
             radius: point_light.radius,
             transform: *transform,
             shadows_enabled: point_light.shadows_enabled,
+            is_player: point_light.is_player,
             shadow_depth_bias: point_light.shadow_depth_bias,
             // The factor of SQRT_2 is for the worst-case diagonal offset
             shadow_normal_bias: point_light.shadow_normal_bias
@@ -476,6 +479,7 @@ pub fn extract_lights(
                         radius: spot_light.radius,
                         transform: *transform,
                         shadows_enabled: spot_light.shadows_enabled,
+                        is_player: true,
                         shadow_depth_bias: spot_light.shadow_depth_bias,
                         // The factor of SQRT_2 is for the worst-case diagonal offset
                         shadow_normal_bias: spot_light.shadow_normal_bias
@@ -895,6 +899,9 @@ pub fn prepare_lights(
                     && index - point_light_count < spot_light_shadow_maps_count))
         {
             flags |= PointLightFlags::SHADOWS_ENABLED;
+            if light.is_player {
+                flags |= PointLightFlags::IS_PLAYER;
+            }
         }
 
         let cube_face_projection = Mat4::perspective_infinite_reverse_rh(

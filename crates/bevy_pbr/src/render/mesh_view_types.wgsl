@@ -21,6 +21,7 @@ const POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT: u32                    = 1u << 0u;
 const POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIVE: u32                  = 1u << 1u;
 const POINT_LIGHT_FLAGS_VOLUMETRIC_BIT: u32                         = 1u << 2u;
 const POINT_LIGHT_FLAGS_AFFECTS_LIGHTMAPPED_MESH_DIFFUSE_BIT: u32   = 1u << 3u;
+const POINT_LIGHT_FLAGS_IS_PLAYER                                   = 1u << 4u;
 
 struct DirectionalCascade {
     clip_from_world: mat4x4<f32>,

@@ -400,6 +400,18 @@ fn apply_pbr_lighting(
     var clusterable_object_index_ranges =
         clustering::unpack_clusterable_object_index_ranges(cluster_index);
 
+    var player_shadow: f32 = 1.0;
+    for (var i: u32 = clusterable_object_index_ranges.first_point_light_index_offset;
+            i < clusterable_object_index_ranges.first_spot_light_index_offset;
+            i = i + 1u) {
+        let light_id = clustering::get_clusterable_object_id(i);
+        if ((in.flags & MESH_FLAGS_SHADOW_RECEIVER_BIT) != 0u
+                && (view_bindings::clusterable_objects.data[light_id].flags & mesh_view_types::POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u
+                && (view_bindings::clusterable_objects.data[light_id].flags & mesh_view_types::POINT_LIGHT_FLAGS_IS_PLAYER) != 0u) {
+            player_shadow = shadows::fetch_point_shadow(light_id, in.world_position, in.world_normal);
+        }
+    }
+
     // Point lights (direct)
     for (var i: u32 = clusterable_object_index_ranges.first_point_light_index_offset;
             i < clusterable_object_index_ranges.first_spot_light_index_offset;
@@ -423,7 +435,7 @@ fn apply_pbr_lighting(
         }
 
         let light_contrib = lighting::point_light(light_id, &lighting_input, enable_diffuse, true);
-        direct_light += light_contrib * shadow;
+        direct_light += light_contrib * shadow * player_shadow;
 
 #ifdef STANDARD_MATERIAL_DIFFUSE_TRANSMISSION
         // NOTE: We use the diffuse transmissive color, the second Lambertian lobe's calculated
@@ -443,7 +455,7 @@ fn apply_pbr_lighting(
 
         let transmitted_light_contrib =
             lighting::point_light(light_id, &transmissive_lighting_input, enable_diffuse, true);
-        transmitted_light += transmitted_light_contrib * transmitted_shadow;
+        transmitted_light += transmitted_light_contrib * shadow * player_shadow;
 #endif
     }
 
