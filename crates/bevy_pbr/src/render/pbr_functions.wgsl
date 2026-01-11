@@ -400,7 +400,8 @@ fn apply_pbr_lighting(
     var clusterable_object_index_ranges =
         clustering::unpack_clusterable_object_index_ranges(cluster_index);
 
-    var player_shadow: f32 = 1.0;
+    var player_shadow: f32 = 0.0;
+    var n_players: f32 = 0.0;
     for (var i: u32 = clusterable_object_index_ranges.first_point_light_index_offset;
             i < clusterable_object_index_ranges.first_spot_light_index_offset;
             i = i + 1u) {
@@ -408,8 +409,13 @@ fn apply_pbr_lighting(
         if ((in.flags & MESH_FLAGS_SHADOW_RECEIVER_BIT) != 0u
                 && (view_bindings::clusterable_objects.data[light_id].flags & mesh_view_types::POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u
                 && (view_bindings::clusterable_objects.data[light_id].flags & mesh_view_types::POINT_LIGHT_FLAGS_IS_PLAYER) != 0u) {
-            player_shadow = shadows::fetch_point_shadow(light_id, in.world_position, in.world_normal);
+            player_shadow += shadows::fetch_point_shadow(light_id, in.world_position, in.world_normal);
+            n_players += 1.0;
         }
+    }
+
+    if (n_players > 0.0) {
+      player_shadow = player_shadow / n_players;
     }
 
     // Point lights (direct)
