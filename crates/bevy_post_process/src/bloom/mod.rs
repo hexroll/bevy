@@ -360,6 +360,10 @@ fn prepare_bloom_textures(
 ) {
     for (entity, camera, bloom) in &views {
         if let Some(viewport) = camera.physical_viewport_size {
+            // Crash seems to happen when the aspect ratio is too extreme
+            if viewport.y < 512 || viewport.x / viewport.y > 2 {
+                continue;
+            }
             // How many times we can halve the resolution minus one so we don't go unnecessarily low
             let mip_count = bloom.max_mip_dimension.ilog2().max(2) - 1;
             let mip_height_ratio = if viewport.y != 0 {
