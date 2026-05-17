@@ -3,7 +3,7 @@ use bevy_app::{App, AppExit, PluginsState};
 use bevy_ecs::{
     change_detection::{DetectChanges, Res},
     entity::Entity,
-    message::{MessageCursor, MessageWriter},
+    message::MessageCursor,
     prelude::*,
     system::SystemState,
     world::FromWorld,
@@ -80,10 +80,7 @@ pub(crate) struct WinitAppRunnerState<T: Message> {
     raw_winit_events: Vec<RawWinitWindowEvent>,
     _marker: PhantomData<T>,
 
-    message_writer_system_state: SystemState<(
-        MessageWriter<'static, WindowResized>,
-        MessageWriter<'static, WindowBackendScaleFactorChanged>,
-        MessageWriter<'static, WindowScaleFactorChanged>,
+    windows_system_state: SystemState<
         Query<
             'static,
             'static,
@@ -93,19 +90,16 @@ pub(crate) struct WinitAppRunnerState<T: Message> {
                 &'static mut WinitWindowPressedKeys,
             ),
         >,
-    )>,
+    >,
 }
 
 impl<M: Message> WinitAppRunnerState<M> {
     fn new(mut app: App) -> Self {
         app.add_message::<M>();
 
-        let message_writer_system_state: SystemState<(
-            MessageWriter<WindowResized>,
-            MessageWriter<WindowBackendScaleFactorChanged>,
-            MessageWriter<WindowScaleFactorChanged>,
+        let windows_system_state: SystemState<
             Query<(&mut Window, &mut CachedWindow, &mut WinitWindowPressedKeys)>,
-        )> = SystemState::new(app.world_mut());
+        > = SystemState::new(app.world_mut());
 
         Self {
             app,
@@ -124,7 +118,7 @@ impl<M: Message> WinitAppRunnerState<M> {
             bevy_window_events: Vec::new(),
             raw_winit_events: Vec::new(),
             _marker: PhantomData,
-            message_writer_system_state,
+            windows_system_state,
         }
     }
 
@@ -205,14 +199,7 @@ impl<M: Message> ApplicationHandler<M> for WinitAppRunnerState<M> {
 
         WINIT_WINDOWS.with_borrow(|winit_windows| {
             ACCESS_KIT_ADAPTERS.with_borrow_mut(|access_kit_adapters| {
-                let (
-                    mut window_resized,
-                    mut window_backend_scale_factor_changed,
-                    mut window_scale_factor_changed,
-                    mut windows,
-                ) = self
-                    .message_writer_system_state
-                    .get_mut(self.app.world_mut());
+                let mut windows = self.windows_system_state.get_mut(self.app.world_mut());
 
                 let Some(window) = winit_windows.get_window_entity(window_id) else {
                     warn!("Skipped event {event:?} for unknown winit Window Id {window_id:?}");
@@ -241,18 +228,20 @@ impl<M: Message> ApplicationHandler<M> for WinitAppRunnerState<M> {
                 }
 
                 match event {
-                    WindowEvent::Resized(size) => {
-                        react_to_resize(window, &mut win, size, &mut window_resized);
-                    }
+                    WindowEvent::Resized(size) => self
+                        .bevy_window_events
+                        .send(react_to_resize(window, &mut win, size)),
                     WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                        react_to_scale_factor_change(
-                            window,
-                            &mut win,
-                            scale_factor,
-                            &mut window_backend_scale_factor_changed,
-                            &mut window_scale_factor_changed,
-                        );
+                        let (window_backend_scale_factor_changed, window_scale_factor_changed) =
+                            react_to_scale_factor_change(window, &mut win, scale_factor);
+
+                        self.bevy_window_events
+                            .send(window_backend_scale_factor_changed);
+                        if let Some(window_scale_factor_changed) = window_scale_factor_changed {
+                            self.bevy_window_events.send(window_scale_factor_changed);
+                        }
                     }
+
                     WindowEvent::CloseRequested => self
                         .bevy_window_events
                         .send(WindowCloseRequested { window }),
@@ -893,42 +882,51 @@ pub(crate) fn react_to_resize(
     window_entity: Entity,
     window: &mut Window,
     size: PhysicalSize<u32>,
-    window_resized: &mut MessageWriter<WindowResized>,
-) {
+) -> WindowResized {
     window
         .resolution
         .set_physical_resolution(size.width, size.height);
 
-    window_resized.write(WindowResized {
+    WindowResized {
         window: window_entity,
         width: window.width(),
         height: window.height(),
-    });
+    }
 }
 
 pub(crate) fn react_to_scale_factor_change(
     window_entity: Entity,
     window: &mut Window,
     scale_factor: f64,
-    window_backend_scale_factor_changed: &mut MessageWriter<WindowBackendScaleFactorChanged>,
-    window_scale_factor_changed: &mut MessageWriter<WindowScaleFactorChanged>,
+) -> (
+    WindowBackendScaleFactorChanged,
+    Option<WindowScaleFactorChanged>,
 ) {
     let prior_factor = window.resolution.scale_factor();
     window.resolution.set_scale_factor(scale_factor as f32);
 
-    window_backend_scale_factor_changed.write(WindowBackendScaleFactorChanged {
+    let window_backend_scale_factor_changed = WindowBackendScaleFactorChanged {
         window: window_entity,
         scale_factor,
-    });
+    };
 
     let scale_factor_override = window.resolution.scale_factor_override();
 
-    if scale_factor_override.is_none() && !relative_eq!(scale_factor as f32, prior_factor) {
-        window_scale_factor_changed.write(WindowScaleFactorChanged {
-            window: window_entity,
-            scale_factor,
-        });
-    }
+    let window_scale_factor_changed =
+        if scale_factor_override.is_none() && !relative_eq!(scale_factor as f32, prior_factor) {
+            let window_scale_factor_changed = WindowScaleFactorChanged {
+                window: window_entity,
+                scale_factor,
+            };
+            Some(window_scale_factor_changed)
+        } else {
+            None
+        };
+
+    (
+        window_backend_scale_factor_changed,
+        window_scale_factor_changed,
+    )
 }
 
 #[cfg(test)]
@@ -1030,8 +1028,8 @@ mod tests {
                     window.0,
                     &mut window.1,
                     changed_scale_factor,
-                    &mut window_backend_scale_factor_changed,
-                    &mut window_scale_factor_changed,
+                    // &mut window_backend_scale_factor_changed,
+                    // &mut window_scale_factor_changed,
                 );
             },
         );
